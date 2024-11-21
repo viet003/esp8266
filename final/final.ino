@@ -3,15 +3,15 @@
 #include <ArduinoJson.h>
 
 // Thông tin Wifi
-#define WIFI_SSID "P501"
-#define WIFI_PASSWORD "0984378397"
+#define WIFI_SSID "Encypt(Stringanythings)"
+#define WIFI_PASSWORD "ditmethgtai"
 
 // Cấu hình dữ liệu Json
 #define JSON_DOC_SIZE 2048
 #define MSG_SIZE 256
 
 // cấu hình địa chỉ Nodeserver
-#define WS_HOST "192.168.51.182"
+#define WS_HOST "192.168.102.29"
 #define WS_PORT 8080
 
 // WebSocket Client kết nối tới máy chủ trên cổng 81
@@ -20,21 +20,28 @@ WebSocketsClient webSocket;
 // Gửi thông báo lỗi tới server
 void sendErrorMessage(const char *error) {
   char msg[MSG_SIZE];
-  sprintf(msg, "{\"action\":\"msg\",\"type\":\"error\",\"body\":\"%s\"}", error);
+  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"error\",\"body\":{\"msg\":\"%s\"}}", error);
   webSocket.sendTXT(msg);  // Gửi tin nhắn tới máy chủ
 }
 
-// Gửi thông báo thành công tới server
-void sendOkMessage(const char *type, const char *body) {
+// Gửi yêu cầu vào cổng
+void sendHandleInMessage(const char *id) {
   char msg[MSG_SIZE];
-  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"%s\",\"body\":\"%s\"}", type, body);
+  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"cmd_int\",\"body\":{\"id\":\"%s\"}}", id);
   webSocket.sendTXT(msg);
 }
 
-// Gửi yêu cầu kiểm tra thẻ
-void sendCheckMessage(const char *type, const char *body) {
+// Gửi yêu cầu ra cổng
+void sendHandleOutMessage(const char *id) {
   char msg[MSG_SIZE];
-  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"%s\",\"body\":{\"id\":\"%s\"}}", type, body);
+  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"cmd_out\",\"body\":{\"id\":\"%s\"}}", id);
+  webSocket.sendTXT(msg);
+}
+
+// Gửi yêu cầu đóng cổng
+void sendHandleCloseMessage() {
+  char msg[MSG_SIZE];
+  sprintf(msg, "{\"sender\":\"esp8266\",\"type\":\"cmd_close\"}");
   webSocket.sendTXT(msg);
 }
 
@@ -59,17 +66,58 @@ void handleMessage(uint8_t *payload) {
 
   // Xử lý message từ webclient
   if (strcmp(doc["sender"], "react") == 0) {
-    sendOkMessage("cmd", "Thao tác thành công!");
+    if (strcmp(doc["type"], "cmd") == 0) {
+      // Kiểm tra nếu "status" tồn tại và là số nguyên
+      if (doc["body"].containsKey("status") && doc["body"]["status"].is<int>()) {
+        int status = doc["body"]["status"];  // Lấy giá trị status
+        switch (status) {
+          case 0:
+            // Đóng cổng ở đây
+            Serial.println("mở cổng" + status);
+            break;
+          case 1:
+            // Mở cổng ở đây
+            Serial.println("đóng cổng" + status);
+            break;
+          default:
+            break;
+        }
+      } else {
+        // Xử lý nếu "status" không tồn tại hoặc không phải là số nguyên
+        sendErrorMessage("status không tồn tại hoặc không phải là số nguyên");
+      }
+    }
   }
+
 
   // xử lý message từ esp8266
   if (strcmp(doc["sender"], "esp8266") == 0) {
-    sendErrorMessage("Định dạng loại tin nhắn không hợp lệ");
+    if (strcmp(doc["type"], "cmd") == 0) {
+      // Kiểm tra nếu "status" tồn tại và là số nguyên
+      if (doc["body"].containsKey("status") && doc["body"]["status"].is<int>()) {
+        int status = doc["body"]["status"];  // Lấy giá trị status
+        switch (status) {
+          case 0:
+            // Đóng cổng ở đây
+            Serial.println("mở cổng" + status);
+            break;
+          case 1:
+            // Mở cổng ở đây
+            Serial.println("đóng cổng" + status);
+            break;
+          default:
+            break;
+        }
+      } else {
+        // Xử lý nếu "status" không tồn tại hoặc không phải là số nguyên
+        sendErrorMessage("status không tồn tại hoặc không phải là số nguyên");
+      }
+    }
   }
 
   // xử lý message từ server
   if (strcmp(doc["sender"], "server") == 0) {
-    sendErrorMessage("Định dạng loại tin nhắn không hợp lệ");
+    // sendErrorMessage("Định dạng loại tin nhắn không hợp lệ");
   }
 }
 
@@ -78,7 +126,6 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
       Serial.println("Đã kết nối tới server WebSocket");
-      sendCheckMessage("check","GHFFFD");
       break;
 
     case WStype_DISCONNECTED:
